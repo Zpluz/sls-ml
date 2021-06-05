@@ -1,0 +1,74 @@
+service: cirrus-backend
+
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  runtime: python3.7
+  lambdaHashingVersion: 20201221
+  stage: dev
+  region: us-east-2
+  environment:
+    PARAMETER_SERVER: ParameterServer
+    
+package:
+ exclude:
+   - .vscode/**
+   - .serverless/**
+   - dnmdb_test.py
+   - tf_test.py
+   - .idea/**
+
+
+
+functions:
+  scheduler:
+    handler: handler.scheduler
+    events:
+      - stream:
+      - httpApi:
+          path: /scheduler
+          method: post
+
+  trainer:
+    handler: handler.trainer
+    events:
+      - s3:
+          bucket: storage-crs
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: batch_dataset/
+          existing: true
+  client:
+    handler: handler.client
+    events:
+      - httpApi:
+          path: /client
+          method: post
+
+resources:
+  Resources:
+    ParameterServer:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Delete
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: "field"
+            AttributeType: "S"   
+          - 
+            AttributeName: "seq"
+            AttributeType: "N"
+        KeySchema:
+          -
+            AttributeName: "field"
+            KeyType: "HASH"
+          -
+            AttributeName: "seq"
+            KeyType: "RANGE"
+        ProvisionedThroughput:
+          ReadCapacityUnits: 10
+          WriteCapacityUnits: 10
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
+        TableName: ${self:provider.environment.PARAMETER_SERVER}
